@@ -147,7 +147,7 @@ NanoWM rollouts can be used directly for downstream applications, including long
 
 ## 🙏 Acknowledgements
 
-We build upon a number of existing codebases: [NanoWM](https://github.com/Vchitect/NanoWM), [Vid2World](https://github.com/thuml/Vid2World), [DFoT](https://github.com/kwsong0113/diffusion-forcing-transformer), and [DINO-WM](https://github.com/gaoyuezhou/dino_wm). More broadly, this repository draws inspirations and design principles from [NanoGPT](https://github.com/karpathy/nanoGPT), [NanoChat](https://github.com/karpathy/nanochat), and [Boyuan Chen's Research Template](https://github.com/buoyancy99/research-template). We sincerely thank the codebases above for open-sourcing their works.
+We build upon a number of existing codebases: [Latte](https://github.com/Vchitect/Latte), [Vid2World](https://github.com/thuml/Vid2World), [DFoT](https://github.com/kwsong0113/diffusion-forcing-transformer), and [DINO-WM](https://github.com/gaoyuezhou/dino_wm). More broadly, this repository draws inspirations and design principles from [NanoGPT](https://github.com/karpathy/nanoGPT), [NanoChat](https://github.com/karpathy/nanochat), and [Boyuan Chen's Research Template](https://github.com/buoyancy99/research-template). We sincerely thank the codebases above for open-sourcing their works.
 
 ## 📝 Citation
 
