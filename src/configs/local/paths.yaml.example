@@ -1,0 +1,22 @@
+# @package _global_
+# Local path configuration - copy to paths.yaml and edit for your environment
+# This file (paths.yaml) is gitignored and will NOT be committed
+#
+# Usage:
+#   cp src/configs/local/paths.yaml.example src/configs/local/paths.yaml
+#   # Edit paths below, then run training as usual
+
+# Root directory for DINO-WM datasets (point_maze, pusht_noise, wall_single, deformable)
+dataset_dir: /path/to/dino_wm_data
+
+# Root directory for CSGO dataset
+csgo_data_dir: /path/to/csgo_data
+
+# Path to pretrained VAE weights (SD 1.x compatible)
+# Options:
+#   - Download from HuggingFace: maxin-cn/Latte (vae subfolder)
+#   - Or use PixArt-alpha VAE: PixArt-alpha/PixArt-XL-2-512x512 (vae subfolder)
+vae_model_path: /path/to/vae
+
+# Output directory for training results and checkpoints
+results_dir: ./results
