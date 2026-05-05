@@ -237,4 +237,3 @@ Run with `dataset=<family>/<name>`.
 - [config_system.md](../config_system.md) — full Hydra reference
 - [training.md](../training.md) — training workflow + design choices
 - [evaluation.md](../evaluation.md) — eval workflow + result tables
-- [`src/wm_datasets/README.md`](../../src/wm_datasets/README.md) — DataSource API reference

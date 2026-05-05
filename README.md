@@ -143,7 +143,6 @@ NanoWM rollouts can be used directly for downstream applications, including long
 - **[docs/applications/planning.md](docs/applications/planning.md)** — MPC + CEM model-predictive control
 - **[docs/applications/long_rollout.md](docs/applications/long_rollout.md)** — long-horizon autoregressive rollout
 - **[docs/applications/video_to_3d.md](docs/applications/video_to_3d.md)** — Depth Anything 3 point cloud pipeline
-- **[src/wm_datasets/README.md](src/wm_datasets/README.md)** — DataSource API reference
 
 ## 🙏 Acknowledgements
 
