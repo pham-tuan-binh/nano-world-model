@@ -28,7 +28,7 @@ curl -L "https://www.dropbox.com/scl/fi/c5nfs6c422nlpj880jbmh/i3d_torchscript.pt
 ## Quick start
 
 ```bash
-# CSGO — 4× GPU, 50k steps
+# CSGO — NanoWM-L/2 model
 python src/main.py experiment=csgo dataset=game/csgo model=nanowm_l2_csgo
 
 # RT-1 (fractal) — main run, NanoWM-B/2
@@ -41,6 +41,9 @@ python src/main.py experiment=dino_wm_pusht dataset=dino_wm/pusht model=nanowm_b
 python src/main.py experiment=csgo dataset=game/csgo model=nanowm_l2_csgo \
     resume_from_checkpoint=<path/to/ckpt>
 ```
+
+Example scripts for the runs in the tables are provided
+under `src/scripts/train/`.
 
 Outputs land under `${RESULTS_DIR}/<run_dir>/`:
 ```
@@ -62,7 +65,7 @@ Monitor with `tensorboard --logdir ${RESULTS_DIR}/<run_dir>/tb`, or set `wandb.e
 
 ## Training loop, in one paragraph
 
-PyTorch Lightning drives the loop. Each step samples a `[B, T, 3, H, W]` clip, encodes frames to VAE latents, samples per-frame diffusion timesteps (logit-normal by default, SD3-style), denoises with the NanoWM transformer, computes the prediction-target loss (v / x / ε), and steps the optimizer (AdamW, lr=1e-4, warmup=1000, cosine decay). Validation runs every `val_every_n_steps` (default 1k); FID/FVD every `metrics.log_every_n_train_steps` (default 5k). Checkpoints save to `latest/` every 1k steps and to `across_timesteps/` every 10k.
+PyTorch Lightning drives the loop. Each step samples a `[B, T, 3, H, W]` clip, encodes frames to VAE latents, samples per-frame diffusion timesteps (logit-normal by default, SD3-style), denoises with the NanoWM transformer, computes the prediction-target loss (v / x / ε / flow), and steps the optimizer (AdamW, lr=1e-4, warmup=1000, cosine decay). Validation runs every `val_every_n_steps` (default 1k); FID/FVD every `metrics.log_every_n_train_steps` (default 5k). Checkpoints save to `latest/` every 1k steps and to `across_timesteps/` every 10k.
 
 Knobs: `experiment.training.{batch_size, max_steps, gradient_clip_norm}`, `experiment.diffusion.{pred_name, noise_schedule, zero_terminal_snr, snr_gamma, timestep_sampling}`, `experiment.infra.{mixed_precision, num_workers, compile}`. See [config_system.md](config_system.md) for the full reference.
 
@@ -72,24 +75,34 @@ We ablate three orthogonal axes head-to-head on RT-1 and ship a checkpoint per a
 
 ### 1. Prediction target
 
-We support **ε** (epsilon), **v**, and **x** prediction. Each arm runs in its native schedule (cosine + ZTSNR for v / x; linear, no ZTSNR for ε — cosine + ε is numerically degenerate at `t=T`), so the comparison isolates the prediction target rather than handicapping any one of them.
+We support **ε** (epsilon), **v**, **x**, and **flow-matching (with v)** prediction. Each arm runs in its native schedule (cosine + ZTSNR for v / x; linear, no ZTSNR for ε — cosine + ε is numerically degenerate at `t=T`), so the comparison isolates the prediction target rather than handicapping any one of them.
 
 <div align="center">
 
 | Target | PSNR ↑ | SSIM ↑ | LPIPS ↓ | FID ↓ | Schedule | HF checkpoint |
 |:-------|:-------|:-------|:--------|:------|:---------|:--------------|
-| **v** | 23.07 | 0.760 | 0.207 | **42.27** | cosine + ZTSNR | [nanowm-b2-rt1-abl-pred-v-50k](https://huggingface.co/knightnemo/nanowm-b2-rt1-abl-pred-v-50k) |
-| x | **23.37** | **0.783** | **0.184** | 42.99 | cosine + ZTSNR | [nanowm-b2-rt1-abl-pred-x-50k](https://huggingface.co/knightnemo/nanowm-b2-rt1-abl-pred-x-50k) |
+| **v** | 23.07 | 0.760 | 0.207 | 42.27 | cosine + ZTSNR | [nanowm-b2-rt1-abl-pred-v-50k](https://huggingface.co/knightnemo/nanowm-b2-rt1-abl-pred-v-50k) |
+| x | 23.37 | **0.783** | **0.184** | 42.99 | cosine + ZTSNR | [nanowm-b2-rt1-abl-pred-x-50k](https://huggingface.co/knightnemo/nanowm-b2-rt1-abl-pred-x-50k) |
 | ε | 21.89 | 0.739 | 0.225 | 48.86 | linear | [nanowm-b2-rt1-abl-pred-epsilon-50k](https://huggingface.co/knightnemo/nanowm-b2-rt1-abl-pred-epsilon-50k) |
+| flow | **23.54** | 0.772 | 0.192 | **38.10** | cosine, no ZTSNR | [nanowm-b2-rt1-abl-pred-flow-50k](https://huggingface.co/knightnemo/nanowm-b2-rt1-abl-pred-flow-50k) |
 
 </div>
 
-**Default**: `pred_name=v`, `noise_schedule=squaredcos_cap_v2`, `zero_terminal_snr=true`. v wins on FID by a small margin and matches x on the rest; both beat ε meaningfully.
+**Default**: `pred_name=v`, `noise_schedule=squaredcos_cap_v2`, `zero_terminal_snr=true`. Flow gives the best FID/PSNR in this sweep, while x gives the best SSIM/LPIPS; all three non-ε targets beat ε meaningfully.
 
 ```bash
 # Override via CLI
 python src/main.py experiment=ablation_rt1 dataset=rt1/rt1 model=nanowm_b2 \
     experiment.diffusion.pred_name=x
+```
+
+Flow matching can be launched the same way:
+
+```bash
+python src/main.py experiment=ablation_rt1 dataset=rt1/rt1 model=nanowm_b2 \
+    experiment.diffusion.pred_name=flow \
+    experiment.diffusion.snr_gamma=0.0 \
+    experiment.diffusion.zero_terminal_snr=false
 ```
 
 ### 2. Action injection
@@ -162,7 +175,7 @@ python src/main.py experiment=ablation_rt1 dataset=rt1/rt1 model=nanowm_l2
 
 ## Reproducing the ablation arms
 
-The 11 ablation checkpoints above are all trained with `experiment=ablation_rt1` (50k steps, NanoWM-B/2 unless overridden). To reproduce e.g. the `pred=x` arm:
+The completed ablation checkpoints above are all trained with `experiment=ablation_rt1` (50k steps, NanoWM-B/2 unless overridden). To reproduce e.g. the `pred=x` arm:
 
 ```bash
 python src/main.py experiment=ablation_rt1 dataset=rt1/rt1 model=nanowm_b2 \

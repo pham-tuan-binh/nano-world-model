@@ -7,6 +7,7 @@ import torch
 
 from . import gaussian_diffusion as gd
 from .respace import SpacedDiffusion, space_timesteps
+from .flow_matching import FlowMatching, PredName as _FlowPredName
 
 
 def sample_training_timesteps(
@@ -57,6 +58,7 @@ def create_diffusion(
         "epsilon" (alias "eps") — noise
         "x"                      — clean image x_0
         "v"                      — v = sqrt(alpha)*eps - sqrt(1-alpha)*x_0
+        "flow"                   — flow matching vector field u = x_0 - ε
 
     zero_terminal_snr: if True, rescale betas so alpha_bar[T] = 0 (Lin et al.
         2023). Recommended to pair with "v" — "epsilon" prediction becomes
@@ -73,11 +75,17 @@ def create_diffusion(
         "epsilon": gd.PredName.EPSILON,
         "x": gd.PredName.X,
         "v": gd.PredName.V,
+        "flow": _FlowPredName.FLOW,
     }
     if pred_name not in pred_name_map:
         raise ValueError(
-            f"Unknown pred_name: {pred_name}. Must be one of {sorted(set(pred_name_map))}."
+            f"Unknown pred_name: {pred_name}. Must be one of "
+            f"{sorted(pred_name_map)}."
         )
+
+    # Flow matching is a separate code path — no beta schedule, no DDIM.
+    if pred_name_map[pred_name] is _FlowPredName.FLOW:
+        return FlowMatching(num_timesteps=diffusion_steps, snr_gamma=snr_gamma)
 
     if pred_name_map[pred_name] == gd.PredName.EPSILON:
         import warnings

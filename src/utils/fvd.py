@@ -161,7 +161,7 @@ def compute_fvd(y_true: torch.Tensor, y_pred: torch.Tensor, max_items: int, devi
 
         # FVD is calculated as the mahalanobis distance between the representation vector statistics
         m = np.square(mu_pred - mu_true).sum()
-        s, _ = scipy.linalg.sqrtm(np.dot(sigma_pred, sigma_true), disp=False)
+        s = scipy.linalg.sqrtm(np.dot(sigma_pred, sigma_true))
         fvd = np.real(m + np.trace(sigma_pred + sigma_true - s * 2))
         return float(fvd)
 

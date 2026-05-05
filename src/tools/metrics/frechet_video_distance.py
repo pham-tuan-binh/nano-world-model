@@ -55,7 +55,7 @@ def compute_fvd(opts, max_real: int, num_gen: int, num_frames: int, realdata_sub
         return float('nan')
 
     m = np.square(mu_gen - mu_real).sum()
-    s, _ = scipy.linalg.sqrtm(np.dot(sigma_gen, sigma_real), disp=False) # pylint: disable=no-member
+    s = scipy.linalg.sqrtm(np.dot(sigma_gen, sigma_real)) # pylint: disable=no-member
     fid = np.real(m + np.trace(sigma_gen + sigma_real - s * 2))
     return float(fid)
 

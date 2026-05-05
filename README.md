@@ -70,7 +70,7 @@ RT-1 (fractal) main run:
 python src/main.py experiment=rt1 dataset=rt1/rt1 model=nanowm_b2
 ```
 
-See [docs/training.md](docs/training.md) for the full training guide, design choices, and ablation tables.
+For reproducibility, we provide example scripts in `src/scripts/`. See [docs/training.md](docs/training.md) for the full training guide, design choices, and ablation tables.
 
 ## 📦 Pretrained Checkpoints
 
@@ -90,7 +90,7 @@ Best-config runs (pred-v · additive · cosine + ZTSNR · NanoWM-B/2 unless note
 
 </div>
 
-We also ship 11 RT-1 ablation arms (one HF checkpoint per axis × method). See [docs/training.md#design-choices](docs/training.md#design-choices) for the full table and ablation numbers.
+We also provide RT-1 ablation tables with HF checkpoint paths. See [docs/training.md#design-choices](docs/training.md#design-choices) for the full table and ablation numbers.
 
 ## 🎬 Sample Predictions
 
@@ -143,7 +143,6 @@ NanoWM rollouts can be used directly for downstream applications, including long
 - **[docs/applications/planning.md](docs/applications/planning.md)** — MPC + CEM model-predictive control
 - **[docs/applications/long_rollout.md](docs/applications/long_rollout.md)** — long-horizon autoregressive rollout
 - **[docs/applications/video_to_3d.md](docs/applications/video_to_3d.md)** — Depth Anything 3 point cloud pipeline
-- **[src/wm_datasets/README.md](src/wm_datasets/README.md)** — DataSource API reference
 
 ## 🙏 Acknowledgements
 
