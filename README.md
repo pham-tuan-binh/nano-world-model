@@ -39,6 +39,9 @@ cd nano-world-model
 conda env create -f environment.yml && conda activate nanowm
 ```
 
+LeRobot dataset loading is provided by `lerobot==0.3.3` in `environment.yml`.
+Do not install `lerobot-datasets`; it is a dataset format version, not a PyPI package.
+
 Set data + results paths (or use the gitignored `src/configs/local/paths.yaml` template — see [docs/config_system.md](docs/config_system.md#path-configuration)):
 
 ```bash

@@ -35,8 +35,7 @@ dependencies:
     - wandb
 
     # Data & datasets
-    - lerobot
-    - lerobot-datasets==2.1.0
+    - lerobot==0.3.3
     - decord
     - h5py
     - pandas
