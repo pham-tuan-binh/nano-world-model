@@ -42,6 +42,26 @@ conda env create -f environment.yml && conda activate nanowm
 LeRobot dataset loading is provided by `lerobot==0.3.3` in `environment.yml`.
 Do not install `lerobot-datasets`; it is a dataset format version, not a PyPI package.
 
+### Alternative: uv (reproducible, CUDA 12.8 / RTX 50-series)
+
+A `pyproject.toml` + `uv.lock` are provided for a [uv](https://docs.astral.sh/uv/)-managed
+environment pinned to the **CUDA 12.8** PyTorch build (required for Blackwell / RTX 50-series
+`sm_120` GPUs; older CUDA wheels raise `no kernel image is available`):
+
+```bash
+uv sync                       # creates .venv and installs the locked deps
+source .venv/bin/activate
+```
+
+Notes on this environment vs. `environment.yml`:
+- **PyTorch Lightning 2.x** (the code uses PL 2.x APIs like `precision="bf16-mixed"`).
+- **`lerobot==0.4.4`** — reads **v3.0** LeRobot datasets (0.3.3 only reads v2.x) while still
+  supporting Python 3.10 and `torch<2.11`.
+- `transformers<5` / `huggingface-hub<1.0` to stay consistent with the lerobot pin.
+- For **AV1-encoded** LeRobot videos, use `video_backend: "pyav"` in the dataset config
+  (PyAV bundles the dav1d decoder; the default torchcodec backend fails on AV1). See
+  `src/configs/dataset/lerobot/naive_bench.yaml` for a complete v3.0 example.
+
 Set data + results paths (or use the gitignored `src/configs/local/paths.yaml` template — see [docs/config_system.md](docs/config_system.md#path-configuration)):
 
 ```bash

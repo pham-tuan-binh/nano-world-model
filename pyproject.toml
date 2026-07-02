@@ -1,0 +1,63 @@
+[project]
+name = "nano-world-model"
+version = "0.1.0"
+description = "Minimalist video world models (diffusion forcing). uv-managed environment."
+requires-python = ">=3.10,<3.12"
+dependencies = [
+    # --- PyTorch (CUDA 12.8 build; required for Blackwell/RTX 50-series sm_120) ---
+    "torch==2.7.1",
+    "torchvision==0.22.1",
+    # --- Core ML ---
+    "numpy",
+    "scipy",
+    "Pillow",
+    "tqdm",
+    "requests",
+    # --- PyTorch ecosystem ---
+    "timm",
+    "einops",
+    "lpips",
+    "piqa",
+    "pytorch-lightning>=2.2,<3",   # repo uses PL 2.x APIs (precision=bf16-mixed, strategy=auto)
+    "torchmetrics",
+    # --- Diffusion / generative ---
+    "diffusers[torch]>=0.27.2",    # >=0.27.2 required by lerobot 0.4.x
+    "accelerate",
+    "transformers<5",              # <5 to stay on huggingface_hub<1.0 (lerobot pin)
+    "huggingface-hub<1.0",
+    # --- Config & experiment management ---
+    "omegaconf",
+    "hydra-core",
+    "tensorboard",
+    "wandb",
+    # --- Data & datasets ---
+    "lerobot==0.4.4",              # v3.0 LeRobot dataset support + py3.10 + torch<2.11
+    "decord",
+    "h5py",
+    "pandas",
+    # --- Image & video processing ---
+    "opencv-python",
+    "imageio",
+    "imageio-ffmpeg",
+    "moviepy==1.0.3",
+    "scikit-image",
+    "av",                          # PyAV: dav1d AV1 decoder for lerobot video_backend=pyav
+    # --- Evaluation metrics ---
+    "pytorch-fid",
+    "matplotlib",
+    "seaborn",
+    # --- Misc ---
+    "sentencepiece",
+    "beautifulsoup4",
+    "ftfy",
+    "protobuf==4.25.3",
+]
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cu128" }]
+torchvision = [{ index = "pytorch-cu128" }]

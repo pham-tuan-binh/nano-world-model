@@ -22,6 +22,7 @@ class LeRobotDataSource(DataSource):
         root: Optional[str] = None,
         image_key: str = "observation.images.image",
         pad_action_dim: Optional[int] = None,
+        video_backend: str = "pyav",
     ):
         try:
             from lerobot.datasets.lerobot_dataset import LeRobotDataset
@@ -35,6 +36,9 @@ class LeRobotDataSource(DataSource):
         self.repo_id = repo_id
         self.root = root
         self.image_key = image_key
+        # lerobot >=0.4 defaults to the torchcodec backend, whose linked FFmpeg
+        # often lacks an AV1 decoder. "pyav" bundles dav1d and decodes AV1 fine.
+        self.video_backend = video_backend
         self.v2 = v2
         # Zero-pad the action's trailing dim to this size at load time. Used by
         # sim→real finetune to match a pretrained ActionEmbedder trained on a
@@ -47,7 +51,8 @@ class LeRobotDataSource(DataSource):
                     repo_id=repo_id,
                     root=root,
                     image_transforms=None,
-                    episodes=None
+                    episodes=None,
+                    video_backend=video_backend,
                 )
                 num_total = temp_dataset.num_episodes
                 n_episodes = int(num_total * n_rollout)
@@ -62,7 +67,8 @@ class LeRobotDataSource(DataSource):
             repo_id=repo_id,
             root=root,
             image_transforms=None,
-            episodes=episodes
+            episodes=episodes,
+            video_backend=video_backend,
         )
 
         self.num_episodes = self.dataset.num_episodes
@@ -157,10 +163,43 @@ class LeRobotDataSource(DataSource):
         of meta.episodes is the episode *number*, not a frame offset — using it
         as `start_idx` was a bug that only worked by coincidence for ep 0.
         """
-        idx_map = self.dataset.episode_data_index
-        start = int(idx_map["from"][index])
-        end = int(idx_map["to"][index])
-        return start, end
+        ranges = self._get_episode_ranges()
+        return ranges[index]
+
+    def _get_episode_ranges(self) -> list[tuple[int, int]]:
+        """Per-episode (global_start, global_end) frame offsets into ``self.dataset``.
+
+        Works across lerobot dataset formats:
+        * v2.x exposes ``episode_data_index["from"/"to"]`` int tensors.
+        * v3.0 dropped that attribute; instead episodes are concatenated in the
+          loaded ``hf_dataset`` and delimited by the ``episode_index`` column.
+          We derive contiguous per-episode blocks in load order, which matches
+          how ``self.dataset[i]`` indexes frames (subset-relative when a subset
+          of episodes is loaded).
+        """
+        cached = getattr(self, "_episode_ranges", None)
+        if cached is not None:
+            return cached
+
+        idx_map = getattr(self.dataset, "episode_data_index", None)
+        if idx_map is not None:  # lerobot v2.x
+            ranges = [
+                (int(idx_map["from"][i]), int(idx_map["to"][i]))
+                for i in range(self.num_episodes)
+            ]
+        else:  # lerobot v3.x
+            import numpy as np
+            epidx = np.asarray(self.dataset.hf_dataset["episode_index"])
+            if len(epidx) == 0:
+                ranges = []
+            else:
+                change = np.nonzero(np.diff(epidx))[0] + 1
+                starts = np.concatenate([[0], change])
+                ends = np.concatenate([change, [len(epidx)]])
+                ranges = [(int(a), int(b)) for a, b in zip(starts, ends)]
+
+        self._episode_ranges = ranges
+        return ranges
 
     def _load_single_trajectory(self, index: int) -> TrajectoryData:
         start_idx, end_idx = self._episode_global_range(index)

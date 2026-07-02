@@ -1,0 +1,24 @@
+# @package dataset
+# Generic LeRobot v3.0 dataset: binhpham/naive-bench (needs lerobot>=0.4.4)
+# SO-101 follower arm, 312 episodes, 30 FPS, action_dim=6, state_dim=6.
+name: "lerobot"
+frame_interval: 3
+loader:
+  data_path: "binhpham/naive-bench"
+  root: "${oc.env:LEROBOT_DATA_ROOT,null}"
+  image_key: "observation.images.overhead_camera"
+  video_backend: "pyav"   # AV1-coded videos need dav1d; torchcodec backend fails
+  n_rollout: null
+  split_ratio: 0.9
+  validation_size: 32
+  normalize_state: False
+  normalize_action: True
+  train_slice_mode: "exhaustive"
+  val_slice_mode: "exhaustive"
+  stride: 1
+  random_seed: 42
+  validation_fixed_subset_path: null
+  validation_fixed_subset_size: null
+  validation_fixed_subset_seed: 42
+spec:
+  action_dim: 6
