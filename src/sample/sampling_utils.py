@@ -10,22 +10,34 @@ from einops import rearrange
 from utils.vae_ops import encode_first_stage, decode_first_stage
 
 
-def encode_frames(vae, frames, device, vae_precision: str = "fp32"):
-    """Encode [B,F,C,H,W] frames to [B,F,C_lat,H/8,W/8] scaled latents."""
+def encode_frames(vae, frames, device, vae_precision: str = "fp32", chunk_size: int = 16):
+    """Encode [B,F,C,H,W] frames to [B,F,C_lat,H/8,W/8] scaled latents.
+
+    Encodes in chunks so peak VAE memory is bounded by chunk_size, not by the
+    total number of frames — needed for long/full-episode rollouts.
+    """
     B, F, C, H, W = frames.shape
-    frames = frames.to(device)
-    frames_flat = rearrange(frames, 'b f c h w -> (b f) c h w')
+    frames_flat = rearrange(frames.to(device), 'b f c h w -> (b f) c h w')
+    outs = []
     with torch.no_grad():
-        latents = encode_first_stage(vae, frames_flat, precision=vae_precision)
+        for i in range(0, frames_flat.shape[0], chunk_size):
+            outs.append(encode_first_stage(vae, frames_flat[i:i + chunk_size], precision=vae_precision))
+    latents = torch.cat(outs, dim=0)
     return rearrange(latents, '(b f) c h w -> b f c h w', b=B)
 
 
-def decode_latents(vae, latents, vae_precision: str = "fp32"):
-    """Decode [B,F,C_lat,H/8,W/8] scaled latents to [B,F,C,H,W] frames in [0,1]."""
+def decode_latents(vae, latents, vae_precision: str = "fp32", chunk_size: int = 16):
+    """Decode [B,F,C_lat,H/8,W/8] scaled latents to [B,F,C,H,W] frames in [0,1].
+
+    Chunked to bound peak VAE-decoder memory for long/full-episode rollouts.
+    """
     B, F = latents.shape[:2]
     latents_flat = rearrange(latents, 'b f c h w -> (b f) c h w')
+    outs = []
     with torch.no_grad():
-        frames = decode_first_stage(vae, latents_flat, precision=vae_precision)
+        for i in range(0, latents_flat.shape[0], chunk_size):
+            outs.append(decode_first_stage(vae, latents_flat[i:i + chunk_size], precision=vae_precision))
+    frames = torch.cat(outs, dim=0)
     frames = rearrange(frames, '(b f) c h w -> b f c h w', b=B)
     return ((frames + 1) / 2).clamp(0, 1)
 

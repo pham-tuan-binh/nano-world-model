@@ -104,10 +104,17 @@ def main(args):
     frame_interval = args.dataset.frame_interval
     batch_size = args.batch_size
     
-    # Filter for valid slices that have enough remaining frames for rollout_length
-    print(f"Filtering dataset for slices with enough headroom (rollout_length={rollout_length})...")
+    full_episode = getattr(args, "full_episode", False)
+    if full_episode:
+        batch_size = 1  # per-episode lengths differ; can't stack into one batch
+
     if dataset.slice_mode != "exhaustive":
         raise ValueError(f"Rollout requires exhaustive slice_mode, got '{dataset.slice_mode}'")
+
+    if full_episode:
+        print("Full-episode mode: each sample rolls from frame 0 for the episode's entire length")
+    else:
+        print(f"Filtering dataset for slices with enough headroom (rollout_length={rollout_length})...")
 
     valid_slice_indices = []
     for i in range(len(dataset)):
@@ -116,7 +123,11 @@ def main(args):
         traj_idx = slice_info.traj_idx
         start_frame = slice_info.start_frame
         total_len = dataset.data_source.get_seq_length(traj_idx)
-        if (total_len - start_frame) >= rollout_length * frame_interval:
+        if full_episode:
+            # One rollout per episode, from its first frame (the whole thing).
+            if start_frame == 0 and (total_len // frame_interval) > history_length:
+                valid_slice_indices.append(i)
+        elif (total_len - start_frame) >= rollout_length * frame_interval:
             valid_slice_indices.append(i)
         if len(valid_slice_indices) >= args.num_samples:
             break
@@ -149,8 +160,14 @@ def main(args):
             start_frame = slice_info.start_frame
             batch_metas.append({"traj_idx": traj_idx, "start_idx": start_frame})
 
+            # Full-episode: roll the episode's entire length from start_frame;
+            # otherwise use the fixed rollout_length. (batch_size==1 in full mode,
+            # so this per-sample rl is the one used by the rollout loop below.)
+            total_len = dataset.data_source.get_seq_length(traj_idx)
+            rl = (total_len - start_frame) // frame_interval if full_episode else rollout_length
+
             # Load visual frames via DataSource (raw, not resized/normalized)
-            end_frame = start_frame + rollout_length * frame_interval
+            end_frame = start_frame + rl * frame_interval
             visual_frames = dataset.data_source.load_visual_frames(
                 index=traj_idx,
                 start=start_frame,
@@ -181,8 +198,8 @@ def main(args):
         gt_latents = encode_frames(vae, gt_visual, device, vae_precision=vae_precision)
         generated_latents = gt_latents[:, :history_length]
         
-        # Now every sample in the batch has exactly rollout_length frames
-        for t in tqdm(range(history_length, rollout_length), desc=f"Rollout progress"):
+        # Roll out to rl frames (per-episode length in full-episode mode).
+        for t in tqdm(range(history_length, rl), desc=f"Rollout progress"):
             context_latents = generated_latents[:, -history_length:]
             
             start_frame_idx = t - history_length
@@ -247,7 +264,9 @@ if __name__ == "__main__":
     parser.add_argument("--save_path", type=str, default="rollout_results", help="Directory to save videos")
     parser.add_argument("--num_samples", type=int, default=1, help="Total number of samples")
     parser.add_argument("--batch_size", type=int, default=1, help="Batch size for parallel rollout")
-    parser.add_argument("--rollout_length", type=int, default=50, help="Rollout frames")
+    parser.add_argument("--rollout_length", type=int, default=50, help="Rollout frames (ignored if --full_episode)")
+    parser.add_argument("--full_episode", action="store_true",
+                        help="Roll each sampled episode from frame 0 for its entire length (forces batch_size=1)")
     parser.add_argument("--history_length", type=int, default=4, help="Context frames")
     parser.add_argument("--scheduling_mode", type=str, default="sequential",
                         choices=["full_sequence", "pyramid", "sequential"],
@@ -282,7 +301,7 @@ if __name__ == "__main__":
 
     # Top-level / non-hierarchical CLI args
     for key in ('ckpt', 'save_path', 'num_samples', 'batch_size', 'rollout_length',
-                'history_length', 'fps', 'eta', 'use_fp16', 'vae_model_path'):
+                'full_episode', 'history_length', 'fps', 'eta', 'use_fp16', 'vae_model_path'):
         val = cli_args.get(key)
         if val is not None:
             cli_overrides[key] = val
