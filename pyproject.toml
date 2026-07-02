@@ -32,6 +32,7 @@ dependencies = [
     "wandb",
     # --- Data & datasets ---
     "lerobot==0.4.4",              # v3.0 LeRobot dataset support + py3.10 + torch<2.11
+    "torchcodec>=0.5,<0.6",        # pin to the torch-2.7 ABI build; 0.10 (lerobot's <0.11 max) needs newer torch and fails to load
     "decord",
     "h5py",
     "pandas",
