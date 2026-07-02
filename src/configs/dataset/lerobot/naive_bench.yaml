@@ -8,6 +8,9 @@ loader:
   root: "${oc.env:LEROBOT_DATA_ROOT,null}"
   image_key: "observation.images.overhead_camera"
   video_backend: "pyav"   # AV1-coded videos need dav1d; torchcodec backend fails
+  # Set to a precomputed-latent dir (tools/precompute_latents.py) to skip video
+  # decode + VAE at train time (GPU-bound, fits big batches). null = decode live.
+  latent_cache_dir: null
   n_rollout: null
   split_ratio: 0.9
   validation_size: 32

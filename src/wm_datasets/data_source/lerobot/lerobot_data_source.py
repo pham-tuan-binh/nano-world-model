@@ -23,6 +23,7 @@ class LeRobotDataSource(DataSource):
         image_key: str = "observation.images.image",
         pad_action_dim: Optional[int] = None,
         video_backend: str = "pyav",
+        latent_cache_dir: Optional[str] = None,
     ):
         try:
             from lerobot.datasets.lerobot_dataset import LeRobotDataset
@@ -39,6 +40,10 @@ class LeRobotDataSource(DataSource):
         # lerobot >=0.4 defaults to the torchcodec backend, whose linked FFmpeg
         # often lacks an AV1 decoder. "pyav" bundles dav1d and decodes AV1 fine.
         self.video_backend = video_backend
+        # Optional precomputed VAE-latent cache (see tools/precompute_latents.py).
+        # When set, load_latents() returns latents and the trainer skips VAE encode.
+        self.latent_cache_dir = latent_cache_dir
+        self.latents_enabled = latent_cache_dir is not None
         self.v2 = v2
         # Zero-pad the action's trailing dim to this size at load time. Used by
         # sim→real finetune to match a pretrained ActionEmbedder trained on a
@@ -201,20 +206,36 @@ class LeRobotDataSource(DataSource):
         self._episode_ranges = ranges
         return ranges
 
+    @staticmethod
+    def _col_to_tensor(col) -> torch.Tensor:
+        import numpy as np
+        if isinstance(col, torch.Tensor):
+            return col.float()
+        if isinstance(col, list) and len(col) and isinstance(col[0], torch.Tensor):
+            return torch.stack(col).float()
+        return torch.as_tensor(np.asarray(col), dtype=torch.float32)
+
     def _load_single_trajectory(self, index: int) -> TrajectoryData:
         start_idx, end_idx = self._episode_global_range(index)
         length = end_idx - start_idx
 
-        states = []
-        actions = []
-
-        for frame_idx in range(start_idx, end_idx):
-            item = self.dataset[frame_idx]
-            states.append(item["observation.state"])
-            actions.append(item["action"])
-
-        states_tensor = torch.stack(states, dim=0)
-        actions_tensor = torch.stack(actions, dim=0)
+        # Read state/action from the parquet-backed hf_dataset columns in bulk.
+        # Indexing self.dataset[i] instead would decode the *video* on every
+        # frame (lerobot returns all modalities), which is the dominant cost and
+        # pointless here — states/actions live in plain columns, no video.
+        hf = getattr(self.dataset, "hf_dataset", None)
+        if hf is not None and {"observation.state", "action"} <= set(hf.column_names):
+            batch = hf[start_idx:end_idx]
+            states_tensor = self._col_to_tensor(batch["observation.state"])
+            actions_tensor = self._col_to_tensor(batch["action"])
+        else:  # fallback: per-frame (decodes video)
+            states, actions = [], []
+            for frame_idx in range(start_idx, end_idx):
+                item = self.dataset[frame_idx]
+                states.append(item["observation.state"])
+                actions.append(item["action"])
+            states_tensor = torch.stack(states, dim=0)
+            actions_tensor = torch.stack(actions, dim=0)
         if self.pad_action_dim is not None:
             cur = actions_tensor.shape[-1]
             if self.pad_action_dim > cur:
@@ -270,6 +291,38 @@ class LeRobotDataSource(DataSource):
             frames_tensor = frames_tensor.float() / 255.0
 
         return frames_tensor
+
+    def load_latents(
+        self,
+        index: int,
+        start: int,
+        end: int,
+        step: int = 1,
+    ) -> torch.Tensor:
+        """Return precomputed VAE latents for an episode slice: [T, C, h, w].
+
+        Cache holds per-frame posterior ``mean`` and ``std`` (both already
+        multiplied by the VAE scaling_factor). We reproduce the training-time
+        ``posterior.sample() * scaling_factor`` by drawing ``mean + std * noise``,
+        so cached training is statistically identical to on-the-fly encoding.
+        Indices are episode-relative, matching load_visual_frames.
+        """
+        import os
+        import numpy as np
+
+        if self.latent_cache_dir is None:
+            raise RuntimeError("load_latents called but latent_cache_dir is not set")
+
+        mean_path = os.path.join(self.latent_cache_dir, f"ep{index:05d}_mean.npy")
+        std_path = os.path.join(self.latent_cache_dir, f"ep{index:05d}_std.npy")
+        # mmap so only the requested frames are paged in.
+        mean_mm = np.load(mean_path, mmap_mode="r")
+        std_mm = np.load(std_path, mmap_mode="r")
+
+        idx = list(range(start, end, step))
+        mean = torch.from_numpy(np.ascontiguousarray(mean_mm[idx])).float()
+        std = torch.from_numpy(np.ascontiguousarray(std_mm[idx])).float()
+        return mean + std * torch.randn_like(mean)
 
     def get_num_trajectories(self) -> int:
         return self.num_episodes

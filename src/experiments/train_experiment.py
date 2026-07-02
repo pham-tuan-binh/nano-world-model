@@ -108,7 +108,30 @@ class NanoWMTrainingModule(LightningModule):
         self.latent_codec.requires_grad_(False)
         self.latent_codec.eval()
         self.model.train()
+
+        # When a latent cache is configured, the dataloader yields precomputed
+        # VAE latents ([b, f, C, h, w]) directly instead of pixels, so the
+        # per-step VAE encode is skipped (see _frames_to_latents). The VAE is
+        # frozen, so cached latents are identical to on-the-fly encoding.
+        cache_dir = None
+        loader_cfg = getattr(getattr(args, "dataset", None), "loader", None)
+        if loader_cfg is not None:
+            cache_dir = getattr(loader_cfg, "latent_cache_dir", None)
+        self._use_latent_cache = bool(cache_dir)
+        if self._use_latent_cache:
+            print(f"[Init] Latent cache ENABLED ({cache_dir}); skipping per-step VAE encode", flush=True)
         print("[Init] NanoWMTrainingModule initialized", flush=True)
+
+    def _frames_to_latents(self, x):
+        """Pixels [b,f,c,h,w] -> latents [b,f,C,h,w]. Pass-through if the
+        dataloader already supplies cached latents."""
+        if self._use_latent_cache:
+            return x
+        b = x.shape[0]
+        x = rearrange(x, "b f c h w -> (b f) c h w").contiguous()
+        x = self._vae_encode(x)
+        x = rearrange(x, "(b f) c h w -> b f c h w", b=b).contiguous()
+        return x
 
     def _sanity_check_latent_codec(self, args):
         """Encode+decode a random batch to catch codec shape and NaN issues."""
@@ -205,10 +228,7 @@ class NanoWMTrainingModule(LightningModule):
             action = batch["action"].to(self.device)
 
         with torch.no_grad():
-            b, _, _, _, _ = x.shape
-            x = rearrange(x, "b f c h w -> (b f) c h w").contiguous()
-            x = self._vae_encode(x)
-            x = rearrange(x, "(b f) c h w -> b f c h w", b=b).contiguous()
+            x = self._frames_to_latents(x)
 
         if self.args.model.extras == 78:
             raise ValueError("T2V training is not supported at this moment!")
@@ -265,10 +285,7 @@ class NanoWMTrainingModule(LightningModule):
             action = batch["action"].to(self.device)
 
         with torch.no_grad():
-            b, _, _, _, _ = x.shape
-            x = rearrange(x, "b f c h w -> (b f) c h w").contiguous()
-            x = self._vae_encode(x)
-            x = rearrange(x, "(b f) c h w -> b f c h w", b=b).contiguous()
+            x = self._frames_to_latents(x)
 
             if self.args.model.extras == 2:
                 model_kwargs = dict(y=video_name)
@@ -308,9 +325,7 @@ class NanoWMTrainingModule(LightningModule):
             n_context = kwargs["cond_frame"]
 
         with torch.no_grad():
-            x_flat = rearrange(x, "b f c h w -> (b f) c h w").contiguous()
-            z = self._vae_encode(x_flat)
-            z = rearrange(z, "(b f) c h w -> b f c h w", b=B).contiguous()
+            z = self._frames_to_latents(x)
 
         model_kwargs = {}
         if self.args.model.extras == 2:

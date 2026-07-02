@@ -529,26 +529,38 @@ class WorldModelDataset(Dataset):
         states = traj_data.states[slice_info.start_frame:slice_info.end_frame:self.frame_interval]
         states = states[:self.num_frames]
 
-        # Load visual frames (on-demand from DataSource)
-        # DataSource API: load_visual_frames(index, start, end, step)
-        video = self.data_source.load_visual_frames(
-            index=slice_info.traj_idx,
-            start=slice_info.start_frame,
-            end=slice_info.end_frame,
-            step=self.frame_interval
-        )  # [T, C, H, W]
+        # If a latent cache is active, load precomputed VAE latents directly and
+        # skip pixel decode/resize/normalize (they were baked in at cache time).
+        use_latents = getattr(self.data_source, "latents_enabled", False)
+        if use_latents:
+            video = self.data_source.load_latents(
+                index=slice_info.traj_idx,
+                start=slice_info.start_frame,
+                end=slice_info.end_frame,
+                step=self.frame_interval,
+            )  # [T, C, h, w] latents
+            video = video[:self.num_frames]
+        else:
+            # Load visual frames (on-demand from DataSource)
+            # DataSource API: load_visual_frames(index, start, end, step)
+            video = self.data_source.load_visual_frames(
+                index=slice_info.traj_idx,
+                start=slice_info.start_frame,
+                end=slice_info.end_frame,
+                step=self.frame_interval
+            )  # [T, C, H, W]
 
-        # Trim to exactly num_frames
-        video = video[:self.num_frames]
+            # Trim to exactly num_frames
+            video = video[:self.num_frames]
 
         # Apply video augmentation if provided
-        if self.video_augmentation is not None:
+        if not use_latents and self.video_augmentation is not None:
             if self.split == "val":
                 print("[WARNING] Applying video augmentation to validation set, not recommended.")
             video = self.video_augmentation(video)
 
         # Resize video if needed
-        if video.shape[-2:] != self.image_size:
+        if not use_latents and video.shape[-2:] != self.image_size:
             if self.resize_mode == "stretch":
                 video = torch.nn.functional.interpolate(
                     video,
@@ -592,8 +604,8 @@ class WorldModelDataset(Dataset):
         if self.normalize_state:
             states = (states - self.state_mean) / self.state_std
 
-        # Normalize pixels to [-1, 1]
-        if self.normalize_pixel:
+        # Normalize pixels to [-1, 1] (cached latents are already final)
+        if not use_latents and self.normalize_pixel:
             # Assume video is in [0, 1] range
             video = video * 2.0 - 1.0
 
@@ -705,7 +717,7 @@ def create_world_model_dataset(
     datasource_params = {
         'use_relative_actions', 'action_scale', 'object_name',
         'file_list', 'use_auxiliary_state',  # file_list is for CSGO DataSource
-        'root', 'image_key', 'preload_trajectories', 'pad_action_dim', 'video_backend',  # LeRobotDataSource
+        'root', 'image_key', 'preload_trajectories', 'pad_action_dim', 'video_backend', 'latent_cache_dir',  # LeRobotDataSource
     }
     for key, value in kwargs.items():
         if key in datasource_params and value is not None:

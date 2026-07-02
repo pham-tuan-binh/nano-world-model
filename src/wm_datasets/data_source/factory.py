@@ -53,7 +53,7 @@ def create_data_source(
         # "lerobot" is the generic route for any LeRobot v2.x dataset.
         # `data_path` is the HF repo_id; optional `root` kwarg points to a
         # local mirror. No per-episode .pth format is supported.
-        lerobot_params = {'root', 'image_key', 'preload_trajectories', 'episodes', 'video_backend'}
+        lerobot_params = {'root', 'image_key', 'preload_trajectories', 'episodes', 'video_backend', 'latent_cache_dir'}
         lerobot_kwargs = {k: v for k, v in kwargs.items() if k in lerobot_params}
         return LeRobotDataSource(
             repo_id=data_path,
